@@ -1,30 +1,36 @@
-import { dbService } from "fbase";
+import Nweet from "components/Nweet";
 import React, { useEffect, useState } from "react";
+import { v4 as uuidv4 } from "uuid";
+import { dbService, storageService } from "fbase";
 
 
-const Home= () => {
+const Home= ({userObj}) => {
     const [nweet, setNweet] = useState("");
     const [nweets, setNweets] = useState([]);
-    const getNweets = async () => {
-        const dbNweets = await dbService.collection("mweet").get();
-        dbNweets.forEach((document) => {
-            const nweetObject = {
-                ...document.data(),
-                id: document.id,
-            };
-            setNweets((prev) => [nweetObject, ...prev]);
-        });
-    };
+    const [attachment, setAttachment] = useState();
+    
     useEffect(()=> {
-        getNweets();
+        //뉴윗 실시간 변동
+        dbService.collection("mweet").onSnapshot((snapshot) => {
+            const nweetArray = snapshot.docs.map((doc) => ({
+                id: doc.id,
+                ...doc.data(),
+            }));
+            setNweets(nweetArray);
+        });
     },[]);
     const onSubmit= async (event) => {
         event.preventDefault();
-        await dbService.collection("mweet").add({
-            nweet,
-            createAt: Date.now(),
-        });
-        setNweet("");
+        //뉴윗 추가
+        // await dbService.collection("mweet").add({
+        //     text:nweet,
+        //     createAt: Date.now(),
+        //     creatorId: userObj.uid,
+        // });
+        const fileRef = storageService.ref().child(`${userObj.uid}/${uuidv4()}`);
+        const response = await fileRef.putString(attachment, "data_url");
+        console.log(response);
+        //setNweet("");
     };
     const onChange = (event) => {
         const{
@@ -32,7 +38,22 @@ const Home= () => {
         } = event;
         setNweet(value);
     }
-    console.log(nweets);
+    const onFilechange =(event) => {
+        const {
+            target : {files},
+        } =event;
+        const theFile = files[0];
+        const reader = new FileReader();
+        reader.onloadend = (finishedEvent)=> {
+            const {
+                currentTarget: { result },
+              } = finishedEvent;
+              setAttachment(result);
+        };
+        reader.readAsDataURL(theFile);
+    
+    };
+    const onClearAttachment = () => setAttachment(null);
     return(
         <div>
             <form onSubmit={onSubmit}>
@@ -43,13 +64,23 @@ const Home= () => {
                     placeholder="What's on your maid?" 
                     maxLength={120}
                 />
+                <input type="file" accept="image/*" onChange={onFilechange} / >
                 <input type="submit" value="Nweet"/>
+                {attachment && (
+                    <div>
+                        <img src={attachment} width="50px" height="50px" />
+                        <button onClick={onClearAttachment}>Clear</button>
+                    </div>
+                )}
             </form>
             <div>
                 {nweets.map((nweet) => (
-                    <div key={nweet.id}>
-                        <h4>{nweet.nweet}</h4>
-                    </div>
+                    //뉴윗 리스트 반환, 포롭스 전달
+                    <Nweet 
+                        key={nweet.id} 
+                        nweetObj={nweet} 
+                        isOwner={nweet.creatorId === userObj.uid} 
+                    />
                 ))}
             </div>
         </div>
